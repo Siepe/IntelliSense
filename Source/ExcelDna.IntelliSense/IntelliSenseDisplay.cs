@@ -27,6 +27,7 @@ namespace ExcelDna.IntelliSense
         // Need to make these late ...?
         ToolTipForm _descriptionToolTip;
         ToolTipForm _argumentsToolTip;
+        SelectBoxForm _selectBox;
         IntPtr _formulaEditWindow;
         IntPtr _functionListWindow;
         string _argumentSeparator = ", ";
@@ -227,10 +228,13 @@ namespace ExcelDna.IntelliSense
                     // Rather ChangeParent...?
                     _argumentsToolTip.Dispose();
                     _argumentsToolTip = null;
+                    _selectBox.Dispose();
+                    _selectBox = null;
                 }
                 if (_formulaEditWindow != IntPtr.Zero)
                 {
                     _argumentsToolTip = new ToolTipForm(_formulaEditWindow);
+                    _selectBox = new SelectBoxForm(_formulaEditWindow);
                     //_argumentsToolTip.OwnerHandle = _formulaEditWindow;
                 }
                 else
@@ -264,7 +268,10 @@ namespace ExcelDna.IntelliSense
         {
             Debug.Print($"IntelliSenseDisplay - FormulaEditStart - FormulaEditWindow: {_formulaEditWindow}, ArgumentsToolTip: {_argumentsToolTip}");
             if (_formulaEditWindow != IntPtr.Zero && _argumentsToolTip == null)
+            {
                 _argumentsToolTip = new ToolTipForm(_formulaEditWindow);
+                _selectBox = new SelectBoxForm(_formulaEditWindow);
+            }
 
             // Normally we would have no formula at this point.
             // One exception is after mouse-click on the formula list, we then need to process it.
@@ -277,11 +284,19 @@ namespace ExcelDna.IntelliSense
         {
             Debug.Print($"IntelliSenseDisplay - FormulaEditEnd");
             // TODO: When can it be null
-            if (_argumentsToolTip != null)
+            if (!_selectBox?.ContainsFocus ?? true)
             {
-                //_argumentsToolTip.Hide();
-                _argumentsToolTip.Dispose();
-                _argumentsToolTip = null;
+                if (_argumentsToolTip != null)
+                {
+                    //_argumentsToolTip.Hide();
+                    _argumentsToolTip.Dispose();
+                    _argumentsToolTip = null;
+                }
+                if (_selectBox != null)
+                {
+                    _selectBox.Dispose();
+                    _selectBox = null;
+                }
             }
         }
 
@@ -314,6 +329,7 @@ namespace ExcelDna.IntelliSense
             Debug.Print($"^^^ FormulaEditStateChanged. CurrentPrefix: {formulaPrefix}, Thread {Thread.CurrentThread.ManagedThreadId}");
             string functionName;
             int currentArgIndex;
+            int toolTipBottom = (int)editWindowBounds.Location.Y + 5;
             if (FormulaParser.TryGetFormulaInfo(formulaPrefix, out functionName, out currentArgIndex))
             {
                 FunctionInfo functionInfo;
@@ -338,7 +354,8 @@ namespace ExcelDna.IntelliSense
                         FormattedText infoText = GetFunctionIntelliSense(functionInfo, currentArgIndex);
                         try
                         {
-                            _argumentsToolTip.ShowToolTip(infoText, lineBeforeFunctionName, (int)editWindowBounds.Left, (int)editWindowBounds.Bottom + 5, topOffset);
+                            _argumentsToolTip.ShowToolTip(infoText, lineBeforeFunctionName, (int)editWindowBounds.Location.X, (int)editWindowBounds.Location.Y + (int)editWindowBounds.Height + 5, topOffset);
+                            toolTipBottom = (int)editWindowBounds.Location.Y + (int)editWindowBounds.Height + 5 + _argumentsToolTip.Height;
                         }
                         catch (Exception ex)
                         {
@@ -351,6 +368,31 @@ namespace ExcelDna.IntelliSense
                     {
                         Logger.Display.Warn("FormulaEditTextChange with no arguments tooltip !?");
                     }
+
+                    if(_selectBox != null)
+                    {
+                        try
+                        {
+                            var argDescription = functionInfo.ArgumentList[currentArgIndex].Description;
+                            int topOffset = GetTopOffset(excelToolTipWindow);
+                            if (hasArgList(argDescription))
+                            {
+                                _selectBox.ShowToolTip(argDescription, lineBeforeFunctionName, (int)editWindowBounds.Location.X, toolTipBottom + 10, topOffset);
+                            }
+                            //else
+                            //{
+                            //    _selectBox.Dispose();
+                            //    _selectBox = null;
+                            //}
+                        }
+                        catch(Exception ex)
+                        {
+                            Logger.Display.Warn($"IntelliSenseDisplay - FormulaEditTextChange Error - {ex}");
+                            _selectBox.Dispose();
+                            _selectBox = null;
+                        }
+                    }
+
                     return;
                 }
 
@@ -358,6 +400,11 @@ namespace ExcelDna.IntelliSense
 
             // All other paths, we hide the box
            _argumentsToolTip?.Hide();
+        }
+
+        private bool hasArgList(string argDescription)
+        {
+            return argDescription.Contains(";ArgList");
         }
 
 
@@ -588,16 +635,24 @@ namespace ExcelDna.IntelliSense
             if (string.IsNullOrEmpty(argumentInfo.Description))
                 return null;
 
+            var name = argumentInfo.Name;
+            var desc = argumentInfo.Description;
+
+            if (desc.Contains(";"))
+            {
+                desc = desc.Split(';').First();
+            }
+
             return new TextLine { 
                     new TextRun
                     {
                         Style = System.Drawing.FontStyle.Bold | System.Drawing.FontStyle.Italic,
-                        Text = argumentInfo.Name + ": "
+                        Text = name + ": "
                     },
                     new TextRun
                     {
                         Style = System.Drawing.FontStyle.Italic,
-                        Text = argumentInfo.Description ?? ""
+                        Text = desc ?? ""
                     },
                 };
         }

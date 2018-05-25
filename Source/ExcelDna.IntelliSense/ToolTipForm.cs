@@ -508,18 +508,19 @@ namespace ExcelDna.IntelliSense
             s_standardFont = new Font(standardFontName, (float)standardFontSize);
         }
 
-        class Win32Window : IWin32Window
+        
+    }
+    public class Win32Window : IWin32Window
+    {
+        public IntPtr Handle
         {
-            public IntPtr Handle
-            {
-                get;
-                private set;
-            }
+            get;
+            private set;
+        }
 
-            public Win32Window(IntPtr handle)
-            {
-                Handle = handle;
-            }
+        public Win32Window(IntPtr handle)
+        {
+            Handle = handle;
         }
     }
 }
